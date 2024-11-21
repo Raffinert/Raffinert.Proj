@@ -73,7 +73,7 @@ public void QueryableLinkTwoProjectionsByMap()
         Category = categoryProj.Map(p.Category)
     });
 
-    var projectedEnumerable = _context.Products.Select(productProj).ToArray();
+    var projectedArray = _context.Products.Select(productProj).ToArray();
 
     Assert.Equivalent(new[]
     {
@@ -110,7 +110,7 @@ public void QueryableLinkTwoProjectionsByMap()
                 IsFruit = true
             }
         }
-    }, projectedProducts);
+    }, projectedArray);
 }
 ```
 
