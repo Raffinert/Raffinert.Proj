@@ -6,10 +6,6 @@
 ## Usage
 Full examples see in [Integration Tests](https://github.com/Raffinert/Raffinert.Proj/blob/main/tests/Raffinert.Proj.IntegrationTests/ProjTests.cs)
 
-### Defining a Specification
-
-## Usage
-
 ### Basic Projection Example
 
 Define a projection for a product:
