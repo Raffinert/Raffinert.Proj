@@ -5,22 +5,22 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-	<Version>1.0.0</Version>
+	<Version>1.0.1</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 	<LangVersion>latest</LangVersion>
 	<AssemblyName>Raffinert.Proj</AssemblyName>
-	<AssemblyVersion>1.0.0</AssemblyVersion>
-	<FileVersion>1.0.0</FileVersion>
+	<AssemblyVersion>1.0.1</AssemblyVersion>
+	<FileVersion>1.0.1</FileVersion>
 	<PackageLicenseExpression>MIT</PackageLicenseExpression>
 	<Copyright>Copyright $([System.DateTime]::Now.Year) Yevhen Cherkes</Copyright>
 	<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 	<Title>Raffinert.Proj</Title>
 	<Description>Raffinert.Proj allows compose projections to create reusable projections.</Description>
-	<PackageProjectUrl>https://github.com/Raffinert/Proj</PackageProjectUrl>
+	<PackageProjectUrl>https://github.com/Raffinert/Raffinert.Proj</PackageProjectUrl>
 	<PackageReadmeFile>README.md</PackageReadmeFile>
-	<RepositoryUrl>https://github.com/Raffinert/Proj.git</RepositoryUrl>
+	<RepositoryUrl>https://github.com/Raffinert/Raffinert.Proj.git</RepositoryUrl>
 	<RepositoryType>git</RepositoryType>
-	<PackageTags>Projection, Proj</PackageTags>
+	<PackageTags>Composabl Projection, Proj</PackageTags>
 	<NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
   
