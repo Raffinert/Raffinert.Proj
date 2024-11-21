@@ -114,6 +114,12 @@ public void QueryableLinkTwoProjectionsByMap()
 }
 ```
 
+### Debugging
+
+The `Proj<T>` class includes built-in debugging support with a custom debugger display, giving developers an immediate view of the underlying expression while debugging.
+
+See also [Raffinert.Spec](https://github.com/Raffinert/Raffinert.Spec) library;
+
 ## Contributing
 
 Contributions are welcome! Please follow these steps:
