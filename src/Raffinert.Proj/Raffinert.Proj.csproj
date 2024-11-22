@@ -15,12 +15,12 @@
 	<Copyright>Copyright $([System.DateTime]::Now.Year) Yevhen Cherkes</Copyright>
 	<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 	<Title>Raffinert.Proj</Title>
-	<Description>Raffinert.Proj allows compose projections to create reusable projections.</Description>
+	<Description>Raffinert.Proj allows compose expressions to create reusable projections.</Description>
 	<PackageProjectUrl>https://github.com/Raffinert/Raffinert.Proj</PackageProjectUrl>
 	<PackageReadmeFile>README.md</PackageReadmeFile>
 	<RepositoryUrl>https://github.com/Raffinert/Raffinert.Proj.git</RepositoryUrl>
 	<RepositoryType>git</RepositoryType>
-	<PackageTags>Composabl Projection, Proj</PackageTags>
+	<PackageTags>Composable Projection, Proj</PackageTags>
 	<NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
   
