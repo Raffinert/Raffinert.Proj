@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
 using Raffinert.Proj.DebugHelpers;
@@ -79,17 +80,40 @@ file sealed class MapCallVisitor : ExpressionVisitor
     {
         if (node.NodeType != ExpressionType.Convert) return base.VisitUnary(node);
 
-        MemberExpression? memberExpr = null;
-        NewExpression? newExpr = null;
-
         if (node.Operand is not MethodCallExpression mcx
             || mcx.Method.Name != nameof(Delegate.CreateDelegate)
-            || mcx.Arguments.Count != 2)
+            || mcx.Arguments.Count != 2 
+            || GetInnerExpression(mcx.Arguments[1]) is not { } innerProjExpression)
         {
             return base.VisitUnary(node);
         }
 
-        switch (mcx.Arguments[1])
+        return innerProjExpression;
+    }
+
+    protected override Expression VisitMethodCall(MethodCallExpression node)
+    {
+        if (node.Method.DeclaringType?.IsGenericType != true
+            || node.Method.DeclaringType?.GetGenericTypeDefinition() != typeof(Proj<,>)
+            || node.Method.Name != nameof(Proj<object, object>.Map)
+            || GetInnerExpression(node.Object) is not { } innerProjExpression)
+        {
+            return base.VisitMethodCall(node);
+        }
+
+        var paramReplacer = new RebindParameterVisitor(innerProjExpression.Parameters[0], node.Arguments[0]);
+
+        var result = paramReplacer.Visit(innerProjExpression.Body)!;
+
+        return result;
+    }
+
+    private static LambdaExpression? GetInnerExpression(Expression? expression)
+    {
+        MemberExpression? memberExpr = null;
+        NewExpression? newExpr = null;
+
+        switch (expression)
         {
             case MemberExpression mex:
                 memberExpr = mex;
@@ -98,69 +122,30 @@ file sealed class MapCallVisitor : ExpressionVisitor
                 newExpr = nex;
                 break;
             default:
-                return base.VisitUnary(node);
+                return null;
         }
 
         if (newExpr != null && !typeof(IProj).IsAssignableFrom(newExpr.Type))
         {
-            return base.VisitUnary(node);
+            return null;
         }
 
-        object value;
+        IProj? value;
 
         if (newExpr != null)
         {
-            value = Expression.Lambda(newExpr).Compile().DynamicInvoke();
+            value = Expression.Lambda(newExpr).Compile().DynamicInvoke() as IProj;
         }
         else if (memberExpr is { Expression: ConstantExpression constantExpression, Member: FieldInfo fieldInfo })
         {
             var container = constantExpression.Value;
-            value = fieldInfo.GetValue(container);
+            value = fieldInfo.GetValue(container) as IProj;
         }
         else
         {
-            return base.VisitUnary(node);
+            return null;
         }
 
-        if (!typeof(IProj).IsAssignableFrom(value.GetType()))
-        {
-            return base.VisitUnary(node);
-        }
-
-        var projExpression = ((IProj)value).GetExpression();
-
-        return projExpression;
-    }
-
-    protected override Expression VisitMethodCall(MethodCallExpression node)
-    {
-        if (node.Method.DeclaringType?.IsGenericType != true
-            || node.Method.DeclaringType?.GetGenericTypeDefinition() != typeof(Proj<,>)
-            || node.Method.Name != nameof(Proj<object, object>.Map)
-            || node.Object is not MemberExpression memberExpr)
-        {
-            return base.VisitMethodCall(node);
-        }
-
-        if (memberExpr is not { Expression: ConstantExpression constantExpression, Member: FieldInfo fieldInfo })
-        {
-            return base.VisitMethodCall(node);
-        }
-
-        var container = constantExpression.Value;
-        var value = fieldInfo.GetValue(container);
-
-        if (!typeof(IProj).IsAssignableFrom(value.GetType()))
-        {
-            return base.VisitMethodCall(node);
-        }
-
-        var projExpression = ((IProj)value).GetExpression();
-
-        var paramReplacer = new RebindParameterVisitor(projExpression.Parameters[0], node.Arguments[0]);
-
-        var result = paramReplacer.Visit(projExpression.Body)!;
-
-        return result;
+        return value?.GetExpression();
     }
 }
