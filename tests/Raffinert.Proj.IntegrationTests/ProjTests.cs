@@ -13,13 +13,12 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
     public void EnumerableLinkTwoProjectionsByMap()
     {
         // Arrange
-        var categoryProj = new CategoryProj();
         var productProj = Proj<Product, ProductDto>.Create(p => new ProductDto
         {
             Id = p.Id,
             Name = p.Name,
             Price = p.Price,
-            Category = categoryProj.Map(p.Category)
+            Category = new CategoryProj().Map(p.Category)
         });
 
         // Act
