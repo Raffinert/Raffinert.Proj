@@ -1,18 +1,18 @@
-﻿using System.Collections.Generic;
+﻿using Raffinert.Proj.DebugHelpers;
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
-using Raffinert.Proj.DebugHelpers;
 
 namespace Raffinert.Proj;
 
-[DebuggerDisplay("{GetExpression()}")]
+[DebuggerDisplay("{GetExpandedExpression()}")]
 [DebuggerTypeProxy(typeof(ProjDebugView))]
 public abstract class Proj<TIn, TOut> : IProj
 {
     public abstract Expression<Func<TIn, TOut>> GetExpression();
 
     LambdaExpression IProj.GetExpression() => GetExpression();
+    LambdaExpression IProj.GetExpandedExpression() => GetExpandedExpression();
 
     public static Proj<TIn, TOut> Create(Expression<Func<TIn, TOut>> expression)
     {
@@ -26,11 +26,19 @@ public abstract class Proj<TIn, TOut> : IProj
     {
         return _compiledExpression ??= GetExpression().Compile();
     }
+
+    private Expression<Func<TIn, TOut>>? _expandedExpression;
+
+    public Expression<Func<TIn, TOut>> GetExpandedExpression()
+    {
+        return _expandedExpression ??= (Expression<Func<TIn, TOut>>)new MapCallVisitor().Visit(GetExpression())!;
+    }
 }
 
 internal interface IProj
 {
     LambdaExpression GetExpression();
+    LambdaExpression GetExpandedExpression();
 }
 
 public static class Queryable
@@ -40,7 +48,7 @@ public static class Queryable
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (projection == null) throw new ArgumentNullException(nameof(projection));
 
-        return source.Select(projection.GetExpression());
+        return source.Select(projection.GetExpandedExpression());
     }
 }
 
@@ -59,7 +67,7 @@ file sealed class InlineProj<TIn, TOut>(Expression<Func<TIn, TOut>> expression) 
 {
     public override Expression<Func<TIn, TOut>> GetExpression()
     {
-        return (Expression<Func<TIn, TOut>>)new MapCallVisitor().Visit(expression)!;
+        return expression;
     }
 }
 
@@ -82,7 +90,7 @@ file sealed class MapCallVisitor : ExpressionVisitor
 
         if (node.Operand is not MethodCallExpression mcx
             || mcx.Method.Name != nameof(Delegate.CreateDelegate)
-            || mcx.Arguments.Count != 2 
+            || mcx.Arguments.Count != 2
             || GetInnerExpression(mcx.Arguments[1]) is not { } innerProjExpression)
         {
             return base.VisitUnary(node);
