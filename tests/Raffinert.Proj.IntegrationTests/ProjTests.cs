@@ -132,7 +132,7 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
         //var proj = Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(p1 => prodProj1.Map(p1)).FirstOrDefault());
         var proj = Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(prodProj1.Map).FirstOrDefault());
 
-        // This won't work
+        // This won't work for IQueryable
         //var proj = Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(Proj<Product, ProductDto>.Create(p1 => new ProductDto
         //{
         //    Id = p1.Id,
