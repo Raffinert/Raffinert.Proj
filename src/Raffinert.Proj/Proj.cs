@@ -19,7 +19,9 @@ public abstract class Proj<TIn, TOut> : IProj
         return new InlineProj<TIn, TOut>(expression);
     }
 
-    public virtual TOut Map(TIn candidate) => GetCompiledExpression()(candidate);
+    public TOut Map(TIn candidate) => GetCompiledExpression()(candidate);
+
+    public TOut? MapIfNotNull(TIn? candidate) => candidate == null ? default : Map(candidate);
 
     private Func<TIn, TOut>? _compiledExpression;
     private Func<TIn, TOut> GetCompiledExpression()
@@ -101,9 +103,11 @@ file sealed class MapCallVisitor : ExpressionVisitor
 
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
+        var isMapIfNotNullMethod = node.Method.Name == nameof(Proj<object, object>.MapIfNotNull);
+
         if (node.Method.DeclaringType?.IsGenericType != true
             || node.Method.DeclaringType?.GetGenericTypeDefinition() != typeof(Proj<,>)
-            || node.Method.Name != nameof(Proj<object, object>.Map)
+            || node.Method.Name != nameof(Proj<object, object>.Map) && !isMapIfNotNullMethod
             || GetInnerExpression(node.Object) is not { } innerProjExpression)
         {
             return base.VisitMethodCall(node);
@@ -111,9 +115,37 @@ file sealed class MapCallVisitor : ExpressionVisitor
 
         var paramReplacer = new RebindParameterVisitor(innerProjExpression.Parameters[0], node.Arguments[0]);
 
-        var result = paramReplacer.Visit(innerProjExpression.Body)!;
+        if (!isMapIfNotNullMethod)
+        {
+            var result = paramReplacer.Visit(innerProjExpression.Body)!;
+            return result;
+        }
 
-        return result;
+        var conditionalLambda = AddNullCheck(innerProjExpression);
+        var conditionalResult = paramReplacer.Visit(conditionalLambda.Body)!;
+
+        return conditionalResult;
+    }
+
+
+    private static LambdaExpression AddNullCheck(LambdaExpression expr)
+    {
+        if (expr.Parameters.Count != 1)
+            throw new ArgumentException("Expression must have exactly one parameter.", nameof(expr));
+
+        var parameter = expr.Parameters[0];
+        var returnType = expr.ReturnType;
+        var nullCheck = Expression.Equal(parameter, Expression.Constant(null, parameter.Type));
+        var ifNull = Expression.Constant(GetDefault(returnType), returnType);
+        var ifNotNull = expr.Body;
+        var conditionalExpr = Expression.Condition(nullCheck, ifNull, ifNotNull);
+
+        return Expression.Lambda(conditionalExpr, parameter);
+    }
+
+    private static object? GetDefault(Type type)
+    {
+        return type.IsValueType ? Activator.CreateInstance(type) : null;
     }
 
     private static LambdaExpression? GetInnerExpression(Expression? expression)

@@ -1,7 +1,7 @@
-using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Raffinert.Proj.IntegrationTests.Infrastructure;
 using Raffinert.Proj.IntegrationTests.Model;
+using System.Linq.Expressions;
 
 namespace Raffinert.Proj.IntegrationTests;
 
@@ -65,7 +65,7 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
     }
 
     [Fact]
-    public async Task QueryableLinkTwoProjectionsByMap()
+    public async Task QueryableLinkTwoProjectionsByMapIfNotNull()
     {
         // Arrange
         var categoryProj = new CategoryProj();
@@ -74,7 +74,7 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
             Id = p.Id,
             Name = p.Name,
             Price = p.Price,
-            Category = categoryProj.Map(p.Category)
+            Category = categoryProj.MapIfNotNull(p.Category)!
         });
 
         // Act
