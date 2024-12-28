@@ -145,22 +145,16 @@ file sealed class UpdateInstanceVisitor(Expression existingInstance) : Expressio
         return Expression.Empty();
     }
 
-    /// <summary>
-    /// Creates an assignment expression for a target member based on the provided source expression.
-    /// </summary>
     private static Expression CreateAssignExpression(Expression targetMember, Expression sourceExpression)
     {
         if (sourceExpression is MemberInitExpression nestedMemberInit)
         {
-            // Handle nested MemberInit expressions
             var nestedVisitor = new UpdateInstanceVisitor(targetMember);
             return nestedVisitor.VisitMemberInit(nestedMemberInit);
         }
-        else
-        {
-            // Handle simple expressions or null
-            return Expression.Assign(targetMember, sourceExpression);
-        }
+
+        // Handle simple expressions or null
+        return Expression.Assign(targetMember, sourceExpression);
     }
 }
 
@@ -174,7 +168,7 @@ file static class LambdaUpdater
 
         var sourceParameter = createExpression.Parameters[0];
 
-        string uniqueExistingParamName = sourceParameter.Name == "existing" ? "existing1" : "existing";
+        var uniqueExistingParamName = sourceParameter.Name == "existing" ? "existing1" : "existing";
         var existingInstance = Expression.Parameter(typeof(TOut), uniqueExistingParamName);
 
         var visitor = new UpdateInstanceVisitor(existingInstance);
