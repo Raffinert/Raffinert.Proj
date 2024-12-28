@@ -19,6 +19,16 @@ public abstract class Proj<TIn, TOut> : IProj
         return new InlineProj<TIn, TOut>(expression);
     }
 
+    public Proj<TIn, TOut> MergeBindings(Proj<TIn, TOut> other)
+    {
+        return new MergedProj<TIn, TOut>(this, other);
+    }
+
+    public Proj<TIn, TOut> MergeBindings(Expression<Func<TIn, TOut>> other)
+    {
+        return MergeBindings(new InlineProj<TIn, TOut>(other));
+    }
+
     public TOut Map(TIn candidate) => GetCompiledExpression()(candidate);
 
     public TOut? MapIfNotNull(TIn? candidate) => candidate == null ? default : Map(candidate);
@@ -43,27 +53,112 @@ internal interface IProj
     LambdaExpression GetExpandedExpression();
 }
 
-public static class Queryable
+file sealed class MergedProj<TIn, TOut>(Proj<TIn, TOut> first, Proj<TIn, TOut> second) : Proj<TIn, TOut>
 {
-    public static IQueryable<TResult> Select<TSource, TResult>(this IQueryable<TSource> source, Proj<TSource, TResult> projection)
+    public override Expression<Func<TIn, TOut>> GetExpression()
     {
-        if (source == null) throw new ArgumentNullException(nameof(source));
-        if (projection == null) throw new ArgumentNullException(nameof(projection));
+        var firstExpression = first.GetExpandedExpression();
+        var firstBindings = ExtractMemberBindings(firstExpression);
+        var firstExpressionParameter = firstExpression.Parameters[0];
+        var secondExpression = second.GetExpandedExpression();
+        var paramReplacer = new RebindParameterVisitor(secondExpression.Parameters[0], firstExpressionParameter);
+        var replacedExpr = (Expression<Func<TIn, TOut>>)paramReplacer.Visit(secondExpression)!;
+        var secondBindings = ExtractMemberBindings(replacedExpr);
+        var allBindings = firstBindings.Concat(secondBindings).ToList();
+        var newBody = Expression.MemberInit(Expression.New(typeof(TOut)), allBindings);
+        return Expression.Lambda<Func<TIn, TOut>>(newBody, firstExpressionParameter);
+    }
 
-        return source.Select(projection.GetExpandedExpression());
+    private static IEnumerable<MemberBinding> ExtractMemberBindings(Expression<Func<TIn, TOut>> expression)
+    {
+        return expression.Body switch
+        {
+            MemberInitExpression memberInit => memberInit.Bindings,
+            ConditionalExpression conditionalExpression => HandleConditionalBindings(conditionalExpression),
+            _ => throw new InvalidOperationException("Expression must be a MemberInitExpression or a ConditionalExpression.")
+        };
+    }
+
+    private static IEnumerable<MemberBinding> HandleConditionalBindings(ConditionalExpression conditional)
+    {
+        if (conditional.IfTrue is MemberInitExpression trueInit && IsDefaultOrNullExpression(conditional.IfFalse))
+        {
+            // Handle p == null ? null : new FlatProduct { ... } and p != null ? new FlatProduct { ... } : default
+            return trueInit.Bindings.Select(binding =>
+            {
+                if (binding is not MemberAssignment trueAssign)
+                {
+                    throw new InvalidOperationException("Unsupported binding type in conditional expression.");
+                }
+
+                var conditionalExpression = Expression.Condition(
+                    conditional.Test,
+                    trueAssign.Expression,
+                    Expression.Default(trueAssign.Expression.Type)
+                );
+
+                return Expression.Bind(trueAssign.Member, conditionalExpression);
+            });
+        }
+
+        if (conditional.IfFalse is MemberInitExpression falseInit && IsDefaultOrNullExpression(conditional.IfTrue))
+        {
+            return falseInit.Bindings.Select(binding =>
+            {
+                if (binding is not MemberAssignment falseAssign)
+                {
+                    throw new InvalidOperationException("Unsupported binding type in conditional expression.");
+                }
+
+                var conditionalExpression = Expression.Condition(
+                    conditional.Test,
+                    Expression.Default(falseAssign.Expression.Type),
+                    falseAssign.Expression
+                );
+
+                return Expression.Bind(falseAssign.Member, conditionalExpression);
+            });
+        }
+
+        var trueBindings = new List<MemberBinding>();
+        var falseBindings = new List<MemberBinding>();
+
+        if (conditional.IfTrue is MemberInitExpression trueInitOther)
+        {
+            trueBindings.AddRange(trueInitOther.Bindings);
+        }
+
+        if (conditional.IfFalse is MemberInitExpression falseInitOther)
+        {
+            falseBindings.AddRange(falseInitOther.Bindings);
+        }
+
+        var allBindings = trueBindings.Zip(falseBindings, (trueBinding, falseBinding) =>
+        {
+            if (trueBinding is not MemberAssignment trueAssign || falseBinding is not MemberAssignment falseAssign)
+            {
+                throw new InvalidOperationException("Unsupported binding type in conditional expression.");
+            }
+
+            var conditionalExpression = Expression.Condition(
+                conditional.Test,
+                trueAssign.Expression,
+                falseAssign.Expression
+            );
+
+            return Expression.Bind(trueAssign.Member, conditionalExpression);
+
+        });
+
+        return allBindings;
+    }
+
+    private static bool IsDefaultOrNullExpression(Expression expression)
+    {
+        return expression is ConstantExpression { Value: null } or DefaultExpression;
     }
 }
 
-public static class Enumerable
-{
-    public static IEnumerable<TResult> Select<TSource, TResult>(this IEnumerable<TSource> source, Proj<TSource, TResult> projection)
-    {
-        if (source == null) throw new ArgumentNullException(nameof(source));
-        if (projection == null) throw new ArgumentNullException(nameof(projection));
-
-        return source.Select(projection.Map);
-    }
-}
 
 file sealed class InlineProj<TIn, TOut>(Expression<Func<TIn, TOut>> expression) : Proj<TIn, TOut>
 {

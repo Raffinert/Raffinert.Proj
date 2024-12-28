@@ -26,6 +26,9 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
         var projectedProducts = projectedEnumerable.ToArray();
 
         // Assert
+        Assert.Equal("p => new ProductDto() {Id = p.Id, Name = p.Name, Price = p.Price, Category = new CategoryProj().Map(p.Category)}",
+            productProj.GetExpression().ToString());
+
         Assert.Equivalent(new[]
         {
             new ProductDto
@@ -82,6 +85,9 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
         var projectedProducts = await productsQuery.ToArrayAsync();
 
         // Assert
+        Assert.Equal("p => new ProductDto() {Id = p.Id, Name = p.Name, Price = p.Price, Category = IIF((p.Category == null), null, new CategoryDto() {Name = p.Category.Name, IsFruit = (p.Category.Name == \"Fruit\")})}",
+            productProj.GetExpandedExpression().ToString());
+
         Assert.Equivalent(new[]
         {
             new ProductDto
@@ -121,30 +127,74 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
     }
 
     [Fact]
-    public async Task QueryableConnectProjectionIntoNestedSelect()
+    public async Task MergeTwoProjections()
     {
         // Arrange
-        var prodProj1 = new ProductProj();
+        var categoryProj = Proj<Category, FlatProductDto>.Create(category => new FlatProductDto
+        {
+            CategoryIsFruit = category.Name == "Fruit",
+            CategoryName = category.Name
+        });
 
-        // This will work
-        //var proj = Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(p1 => new ProductProj().Map(p1)).FirstOrDefault());
-        //var proj = Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(new ProductProj().Map).FirstOrDefault());
-        //var proj = Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(p1 => prodProj1.Map(p1)).FirstOrDefault());
-        var proj = Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(prodProj1.Map).FirstOrDefault());
+        var productProj = Proj<Product, FlatProductDto>.Create(product => new FlatProductDto
+        {
+            Id = product.Id,
+            Name = product.Name,
+            Price = product.Price,
+            CategoryName = ""
+        });
 
-        // This won't work for IQueryable
-        //var proj = Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(Proj<Product, ProductDto>.Create(p1 => new ProductDto
-        //{
-        //    Id = p1.Id,
-        //    Name = p1.Name,
-        //    Price = p1.Price
-        //}).Map).FirstOrDefault());
+        var mergedProj = productProj.MergeBindings(p => categoryProj.MapIfNotNull(p.Category)!);
 
+        // Act
+        var productsQuery = _context.Products.Select(mergedProj);
+        var projectedProducts = await productsQuery.ToArrayAsync();
+
+        // Assert
+        Assert.Equal(mergedProj.GetExpression().ToString(), mergedProj.GetExpandedExpression().ToString());
+        Assert.Equal("product => new FlatProductDto() {Id = product.Id, Name = product.Name, Price = product.Price, CategoryName = \"\", CategoryIsFruit = IIF((product.Category == null), default(Boolean), (product.Category.Name == \"Fruit\")), CategoryName = IIF((product.Category == null), default(String), product.Category.Name)}",
+            mergedProj.GetExpression().ToString());
+
+        Assert.Equivalent(new[]
+        {
+            new FlatProductDto
+            {
+                Id = 1,
+                Name = "Apple",
+                Price = 10.0m,
+                CategoryName = "Fruit",
+                CategoryIsFruit = true
+            },
+            new FlatProductDto
+            {
+                Id = 2,
+                Name = "Banana",
+                Price = 15.0m,
+                CategoryName = "Fruit",
+                CategoryIsFruit = true
+            },
+            new FlatProductDto
+            {
+                Id = 3,
+                Name = "Cherry",
+                Price = 8.0m,
+                CategoryName = "Fruit",
+                CategoryIsFruit = true
+            }
+        }, projectedProducts);
+    }
+
+    [Theory]
+    [MemberData(nameof(GetProjectionCases))]
+    public async Task QueryableConnectProjectionIntoNestedSelect(Proj<Product, ProductDto?> proj, string expectedExpressionString)
+    {
         // Act
         var productsQuery = _context.Products.Select(proj);
         var projectedProducts = await productsQuery.ToArrayAsync();
 
         // Assert
+        Assert.Equal(expectedExpressionString, proj.GetExpandedExpression().ToString());
+
         Assert.Equivalent(new[]
         {
             new
@@ -166,6 +216,20 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
                 Price = 10.0m
             }
         }, projectedProducts);
+    }
+
+    public static IEnumerable<object[]> GetProjectionCases()
+    {
+        var prodProj = new ProductProj();
+
+        return new List<object[]>
+        {
+            new object[] { Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(p1 => new ProductProj().Map(p1)).FirstOrDefault()), "p => p.Category.Products.Select(p1 => new ProductDto() {Id = p1.Id, Name = p1.Name, Price = p1.Price}).FirstOrDefault()" },
+            new object[] { Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(new ProductProj().Map).FirstOrDefault()), "p => p.Category.Products.Select(p => new ProductDto() {Id = p.Id, Name = p.Name, Price = p.Price}).FirstOrDefault()"},
+            new object[] { Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(p1 => prodProj.Map(p1)).FirstOrDefault()), "p => p.Category.Products.Select(p1 => new ProductDto() {Id = p1.Id, Name = p1.Name, Price = p1.Price}).FirstOrDefault()"},
+            new object[] { Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(prodProj.Map).FirstOrDefault()), "p => p.Category.Products.Select(p => new ProductDto() {Id = p.Id, Name = p.Name, Price = p.Price}).FirstOrDefault()"},
+            // new object[] { Proj<Product, ProductDto?>.Create(p => p.Category.Products.Select(Proj<Product, ProductDto>.Create(p1 => new ProductDto { Id = p1.Id, Name = p1.Name, Price = p1.Price }).Map).FirstOrDefault()), ""} -- this won't work for IQueryable
+        };
     }
 
     private class ProductProj : Proj<Product, ProductDto>
@@ -201,5 +265,14 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
     {
         public required string Name { get; set; }
         public bool IsFruit { get; set; }
+    }
+
+    public class FlatProductDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public decimal Price { get; set; }
+        public string CategoryName { get; set; }
+        public bool CategoryIsFruit { get; set; }
     }
 }
