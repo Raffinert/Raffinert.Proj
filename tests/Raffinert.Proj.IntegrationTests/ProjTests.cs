@@ -27,8 +27,16 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
         var projectedProducts = projectedEnumerable.ToArray();
 
         // Assert
-        Assert.Equal("p => new ProductDto() {Id = p.Id, Name = p.Name, Price = p.Price, Category = new CategoryProj().Map(p.Category)}",
-            productProj.GetExpression().ToString());
+        Assert.Equal("""
+                     p => new ProjTests.ProductDto
+                     {
+                         Id = p.Id,
+                         Name = p.Name,
+                         Price = p.Price,
+                         Category = new ProjTests.CategoryProj().Map(p.Category)
+                     }
+                     """,
+            productProj.GetExpression().ToReadableString());
 
         Assert.Equivalent(new[]
         {
@@ -86,8 +94,22 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
         var projectedProducts = await productsQuery.ToArrayAsync();
 
         // Assert
-        Assert.Equal("p => new ProductDto() {Id = p.Id, Name = p.Name, Price = p.Price, Category = IIF((p.Category == null), null, new CategoryDto() {Name = p.Category.Name, IsFruit = (p.Category.Name == \"Fruit\")})}",
-            productProj.GetExpandedExpression().ToString());
+        Assert.Equal("""
+                     p => new ProjTests.ProductDto
+                     {
+                         Id = p.Id,
+                         Name = p.Name,
+                         Price = p.Price,
+                         Category = (p.Category == null)
+                             ? null
+                             : new ProjTests.CategoryDto
+                             {
+                                 Name = p.Category.Name,
+                                 IsFruit = p.Category.Name == "Fruit"
+                             }
+                     }
+                     """,
+            productProj.GetExpandedExpression().ToReadableString());
 
         Assert.Equivalent(new[]
         {
@@ -212,8 +234,18 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
 
         // Assert
         Assert.Equal(mergedProj.GetExpression().ToString(), mergedProj.GetExpandedExpression().ToString());
-        Assert.Equal("product => new FlatProductDto() {Id = product.Id, Name = product.Name, Price = product.Price, CategoryName = \"\", CategoryIsFruit = IIF((product.Category == null), default(Boolean), (product.Category.Name == \"Fruit\")), CategoryName = IIF((product.Category == null), default(String), product.Category.Name)}",
-            mergedProj.GetExpression().ToString());
+        Assert.Equal("""
+                     product => new ProjTests.FlatProductDto
+                     {
+                         Id = product.Id,
+                         Name = product.Name,
+                         Price = product.Price,
+                         CategoryName = "",
+                         CategoryIsFruit = (product.Category == null) ? default(bool) : product.Category.Name == "Fruit",
+                         CategoryName = (product.Category == null) ? null : product.Category.Name
+                     }
+                     """,
+            mergedProj.GetExpression().ToReadableString());
 
         Assert.Equivalent(new[]
         {
