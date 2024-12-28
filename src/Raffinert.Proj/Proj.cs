@@ -13,6 +13,7 @@ public abstract class Proj<TIn, TOut> : IProj
 
     LambdaExpression IProj.GetExpression() => GetExpression();
     LambdaExpression IProj.GetExpandedExpression() => GetExpandedExpression();
+    LambdaExpression IProj.GetMapToExistingExpression() => GetMapToExistingExpression();
 
     public static Proj<TIn, TOut> Create(Expression<Func<TIn, TOut>> expression)
     {
@@ -33,6 +34,18 @@ public abstract class Proj<TIn, TOut> : IProj
 
     public TOut? MapIfNotNull(TIn? candidate) => candidate == null ? default : Map(candidate);
 
+    public void MapToExisting(TIn source, ref TOut? dest)
+    {
+        if (dest == null)
+        {
+            dest = Map(source);
+            return;
+        }
+
+        var mapAction = GetMapToExistingAction();
+        mapAction(source, dest);
+    }
+
     private Func<TIn, TOut>? _compiledExpression;
     private Func<TIn, TOut> GetCompiledExpression()
     {
@@ -45,12 +58,135 @@ public abstract class Proj<TIn, TOut> : IProj
     {
         return _expandedExpression ??= (Expression<Func<TIn, TOut>>)new MapCallVisitor().Visit(GetExpression())!;
     }
+
+    private Expression<Action<TIn, TOut>>? _mapToExistingExpression;
+
+    public Expression<Action<TIn, TOut>> GetMapToExistingExpression()
+    {
+        if (_mapToExistingExpression != null)
+        {
+            return _mapToExistingExpression;
+
+        }
+        var expandedExpression = GetExpandedExpression();
+        return _mapToExistingExpression = LambdaUpdater.RewriteToUpdateAction(expandedExpression);
+    }
+
+    private Action<TIn, TOut>? _mapToExistingAction;
+
+    public Action<TIn, TOut> GetMapToExistingAction()
+    {
+        if (_mapToExistingAction != null)
+        {
+            return _mapToExistingAction;
+
+        }
+        var mapToExistingExpression = GetMapToExistingExpression();
+        return _mapToExistingAction = mapToExistingExpression.Compile();
+    }
 }
 
 internal interface IProj
 {
     LambdaExpression GetExpression();
     LambdaExpression GetExpandedExpression();
+    LambdaExpression GetMapToExistingExpression();
+}
+
+file sealed class UpdateInstanceVisitor(Expression existingInstance) : ExpressionVisitor
+{
+    protected override Expression VisitMemberInit(MemberInitExpression node)
+    {
+        var bindings = new List<Expression>();
+
+        foreach (var binding in node.Bindings)
+        {
+            if (binding is MemberAssignment assignment)
+            {
+                var member = assignment.Member;
+                var targetMember = Expression.PropertyOrField(existingInstance, member.Name);
+
+                if (assignment.Expression is ConditionalExpression conditional)
+                {
+                    var trueBranch = CreateAssignExpression(targetMember, conditional.IfTrue);
+                    var falseBranch = CreateAssignExpression(targetMember, conditional.IfFalse);
+
+                    var conditionalBlock = Expression.IfThenElse(
+                        conditional.Test,
+                        trueBranch,
+                        falseBranch
+                    );
+
+                    bindings.Add(conditionalBlock);
+                }
+                else if (assignment.Expression is MemberInitExpression nestedMemberInit)
+                {
+                    var nestedVisitor = new UpdateInstanceVisitor(targetMember);
+                    var nestedAssignments = nestedVisitor.VisitMemberInit(nestedMemberInit);
+                    bindings.Add(nestedAssignments);
+                }
+                else
+                {
+                    bindings.Add(Expression.Assign(targetMember, assignment.Expression));
+                }
+            }
+            else
+            {
+                throw new NotSupportedException("Only MemberAssignment bindings are supported.");
+            }
+        }
+
+        return Expression.Block(bindings);
+    }
+
+    protected override Expression VisitNew(NewExpression node)
+    {
+        // Skip the creation of a new instance
+        return Expression.Empty();
+    }
+
+    /// <summary>
+    /// Creates an assignment expression for a target member based on the provided source expression.
+    /// </summary>
+    private static Expression CreateAssignExpression(Expression targetMember, Expression sourceExpression)
+    {
+        if (sourceExpression is MemberInitExpression nestedMemberInit)
+        {
+            // Handle nested MemberInit expressions
+            var nestedVisitor = new UpdateInstanceVisitor(targetMember);
+            return nestedVisitor.VisitMemberInit(nestedMemberInit);
+        }
+        else
+        {
+            // Handle simple expressions or null
+            return Expression.Assign(targetMember, sourceExpression);
+        }
+    }
+}
+
+file static class LambdaUpdater
+{
+    public static Expression<Action<TIn, TOut>> RewriteToUpdateAction<TIn, TOut>(
+        Expression<Func<TIn, TOut>> createExpression)
+    {
+        if (createExpression == null)
+            throw new ArgumentNullException(nameof(createExpression));
+
+        var sourceParameter = createExpression.Parameters[0];
+
+        string uniqueExistingParamName = sourceParameter.Name == "existing" ? "existing1" : "existing";
+        var existingInstance = Expression.Parameter(typeof(TOut), uniqueExistingParamName);
+
+        var visitor = new UpdateInstanceVisitor(existingInstance);
+
+        var updatedBody = visitor.Visit(createExpression.Body);
+
+        return Expression.Lambda<Action<TIn, TOut>>(
+            updatedBody!,
+            sourceParameter,
+            existingInstance
+        );
+    }
 }
 
 file sealed class MergedProj<TIn, TOut>(Proj<TIn, TOut> first, Proj<TIn, TOut> second) : Proj<TIn, TOut>

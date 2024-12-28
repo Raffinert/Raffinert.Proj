@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Raffinert.Proj.IntegrationTests.Infrastructure;
 using Raffinert.Proj.IntegrationTests.Model;
 using System.Linq.Expressions;
+using AgileObjects.ReadableExpressions;
 
 namespace Raffinert.Proj.IntegrationTests;
 
@@ -124,6 +125,65 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
                 }
             }
         }, projectedProducts);
+    }
+
+    [Fact]
+    public async Task MapToExisting()
+    {
+        // Arrange
+        var categoryProj = new CategoryProj();
+        var productProj = Proj<Product, ProductDto>.Create(p => new ProductDto
+        {
+            Id = p.Id,
+            Name = p.Name,
+            Price = p.Price,
+            Category = categoryProj.MapIfNotNull(p.Category)!
+        });
+
+        // Act
+        var product = await _context.Products.Include(p => p.Category).FirstAsync(p => p.Id == 1);
+        var existingNestedCategoryDto = new CategoryDto { Name = "N" };
+        var existingProductDto = new ProductDto { Name = "", Category = existingNestedCategoryDto };
+        productProj.MapToExisting(product, ref existingProductDto);
+
+        // Assert
+        Assert.Equal("""
+                     (p, existing) =>
+                     {
+                         existing.Id = p.Id;
+                         existing.Name = p.Name;
+                         existing.Price = p.Price;
+                     
+                         if (p.Category == null)
+                         {
+                             existing.Category = null;
+                         }
+                         else
+                         {
+                             existing.Category.Name = p.Category.Name;
+                             existing.Category.IsFruit = p.Category.Name == "Fruit";
+                         }
+                     }
+                     """,
+            productProj.GetMapToExistingExpression().ToReadableString());
+
+        Assert.Equivalent(new ProductDto
+        {
+            Id = 1,
+            Name = "Apple",
+            Price = 10.0m,
+            Category = new CategoryDto
+            {
+                Name = "Fruit",
+                IsFruit = true
+            }
+        }, existingProductDto);
+
+        Assert.Equivalent(new CategoryDto
+        {
+            Name = "Fruit",
+            IsFruit = true
+        }, existingNestedCategoryDto);
     }
 
     [Fact]

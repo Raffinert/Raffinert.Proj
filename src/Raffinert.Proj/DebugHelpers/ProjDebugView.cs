@@ -14,5 +14,6 @@ internal class ProjDebugView(IProj proj)
 
         public LambdaExpression Expression => _proj.GetExpression();
         public LambdaExpression ExpandedExpression => _proj.GetExpandedExpression();
+        public LambdaExpression MapToExistingExpression => _proj.GetMapToExistingExpression();
     }
 }
