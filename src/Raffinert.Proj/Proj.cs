@@ -411,6 +411,6 @@ file sealed class MapCallVisitor : ExpressionVisitor
             return null;
         }
 
-        return value?.GetExpression();
+        return value?.GetExpandedExpression();
     }
 }
