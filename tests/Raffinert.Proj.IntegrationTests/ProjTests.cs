@@ -1,8 +1,8 @@
+using AgileObjects.ReadableExpressions;
 using Microsoft.EntityFrameworkCore;
 using Raffinert.Proj.IntegrationTests.Infrastructure;
 using Raffinert.Proj.IntegrationTests.Model;
 using System.Linq.Expressions;
-using AgileObjects.ReadableExpressions;
 
 namespace Raffinert.Proj.IntegrationTests;
 
@@ -88,6 +88,72 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
             Price = p.Price,
             Category = categoryProj.MapIfNotNull(p.Category)!
         });
+
+        // Act
+        var productsQuery = _context.Products.Select(productProj);
+        var projectedProducts = await productsQuery.ToArrayAsync();
+
+        // Assert
+        Assert.Equal("""
+                     p => new ProjTests.ProductDto
+                     {
+                         Id = p.Id,
+                         Name = p.Name,
+                         Price = p.Price,
+                         Category = (p.Category == null)
+                             ? null
+                             : new ProjTests.CategoryDto
+                             {
+                                 Name = p.Category.Name,
+                                 IsFruit = p.Category.Name == "Fruit"
+                             }
+                     }
+                     """,
+            productProj.GetExpandedExpression().ToReadableString());
+
+        Assert.Equivalent(new[]
+        {
+            new ProductDto
+            {
+                Id = 1,
+                Name = "Apple",
+                Price = 10.0m,
+                Category = new CategoryDto
+                {
+                    Name = "Fruit",
+                    IsFruit = true
+                }
+            },
+            new ProductDto
+            {
+                Id = 2,
+                Name = "Banana",
+                Price = 15.0m,
+                Category = new CategoryDto
+                {
+                    Name = "Fruit",
+                    IsFruit = true
+                }
+            },
+            new ProductDto
+            {
+                Id = 3,
+                Name = "Cherry",
+                Price = 8.0m,
+                Category = new CategoryDto
+                {
+                    Name = "Fruit",
+                    IsFruit = true
+                }
+            }
+        }, projectedProducts);
+    }
+
+    [Fact]
+    public async Task QueryableNestedCategoryProductProj()
+    {
+        // Arrange
+        var productProj = new NestedCategoryProductProj(new CategoryProj());
 
         // Act
         var productsQuery = _context.Products.Select(productProj);
@@ -333,6 +399,20 @@ public class ProjTests(ProductFilterFixture fixture) : IClassFixture<ProductFilt
                 Id = p.Id,
                 Name = p.Name,
                 Price = p.Price
+            };
+        }
+    }
+
+    private class NestedCategoryProductProj(Proj<Category, CategoryDto> categoryProj) : Proj<Product, ProductDto>
+    {
+        public override Expression<Func<Product, ProductDto>> GetExpression()
+        {
+            return p => new ProductDto
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Price = p.Price,
+                Category = categoryProj.MapIfNotNull(p.Category)!
             };
         }
     }
