@@ -1,5 +1,20 @@
 [![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/banner2-direct.svg)](https://stand-with-ukraine.pp.ua)
 
+> [!IMPORTANT]
+> **This project has been superseded by [Raffinert.Expressions](https://github.com/Raffinert/Raffinert.Expressions) and is no longer actively maintained.**
+>
+> `Raffinert.Proj` has been consolidated with `Raffinert.Spec` into **Raffinert.Expressions**, which provides a unified API for composable conditions and projections built on the same expression-expansion engine.
+>
+> For new projects, use **[Raffinert.Expressions](https://github.com/Raffinert/Raffinert.Expressions)**.
+>
+> Existing `Raffinert.Proj` users can migrate primarily by replacing:
+>
+> * `Proj<TSource, TResult>` → `Projection<TSource, TResult>`
+> * `Map(...)` → `Invoke(...)`
+> * `MapIfNotNull(...)` → `InvokeOrDefault(...)`
+>
+> See the **[migration guide](https://github.com/Raffinert/Raffinert.Expressions/blob/main/docs/migration.md)** for details.
+
 # Raffinert.Proj
 [![NuGet version (Raffinert.Proj)](https://img.shields.io/nuget/v/Raffinert.Proj.svg?style=flat-square)](https://www.nuget.org/packages/Raffinert.Proj/)
 
